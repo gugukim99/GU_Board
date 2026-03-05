@@ -1,9 +1,192 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>내 대시보드</title>
-  </head>
-  <body>
-    <h1>안녕하세요! 대시보드입니다 👋</h1>
-  </body>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>작업 대시보드</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #333; }
+  header { background: #24292e; color: #fff; padding: 16px 24px; font-size: 20px; font-weight: bold; }
+  .container { max-width: 900px; margin: 30px auto; padding: 0 16px; }
+
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 24px; }
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .cal-header h2 { font-size: 18px; }
+  .cal-header button { background: #0969da; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 14px; }
+  .cal-header button:hover { background: #0752a3; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-day-label { text-align: center; font-size: 12px; font-weight: bold; color: #888; padding: 4px 0; }
+  .cal-day-label:first-child { color: #e03e3e; }
+  .cal-day-label:last-child { color: #0969da; }
+  .cal-cell { min-height: 52px; border-radius: 8px; padding: 6px; cursor: pointer; transition: background 0.15s; position: relative; background: #f6f8fa; }
+  .cal-cell:hover { background: #dbeafe; }
+  .cal-cell.empty { background: transparent; cursor: default; }
+  .cal-cell.today { background: #0969da; color: #fff; font-weight: bold; }
+  .cal-cell.today:hover { background: #0752a3; }
+  .cal-cell.has-task::after { content: ''; display: block; width: 6px; height: 6px; background: #f59e0b; border-radius: 50%; position: absolute; bottom: 5px; right: 5px; }
+  .cal-cell.today.has-task::after { background: #fff; }
+  .cal-cell.selected { outline: 2px solid #f59e0b; }
+  .day-num { font-size: 13px; }
+
+  .task-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .task-header h2 { font-size: 16px; }
+  .selected-date-label { font-size: 13px; color: #0969da; font-weight: bold; }
+  .task-input-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .task-input-row input { flex: 1; padding: 8px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; }
+  .task-input-row button { background: #2da44e; color: #fff; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+  .task-input-row button:hover { background: #218838; }
+  .task-list { list-style: none; }
+  .task-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #f6f8fa; margin-bottom: 6px; }
+  .task-item input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+  .task-item span { flex: 1; font-size: 14px; }
+  .task-item.done span { text-decoration: line-through; color: #aaa; }
+  .task-item button { background: none; border: none; color: #cf222e; cursor: pointer; font-size: 16px; }
+  .empty-msg { text-align: center; color: #aaa; font-size: 14px; padding: 20px 0; }
+
+  .progress-bar { background: #e2e8f0; border-radius: 99px; height: 10px; margin-top: 14px; }
+  .progress-fill { height: 10px; border-radius: 99px; background: #2da44e; transition: width 0.3s; }
+  .progress-label { font-size: 12px; color: #666; margin-top: 6px; text-align: right; }
+</style>
+</head>
+<body>
+<header>📋 나의 작업 대시보드</header>
+<div class="container">
+
+  <div class="card">
+    <div class="cal-header">
+      <button onclick="changeMonth(-1)">◀ 이전</button>
+      <h2 id="cal-title"></h2>
+      <button onclick="changeMonth(1)">다음 ▶</button>
+    </div>
+    <div class="cal-grid" id="cal-grid">
+      <div class="cal-day-label">일</div>
+      <div class="cal-day-label">월</div>
+      <div class="cal-day-label">화</div>
+      <div class="cal-day-label">수</div>
+      <div class="cal-day-label">목</div>
+      <div class="cal-day-label">금</div>
+      <div class="cal-day-label">토</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="task-header">
+      <h2>✅ 할 일 목록</h2>
+      <span class="selected-date-label" id="selected-date-label"></span>
+    </div>
+    <div class="task-input-row">
+      <input id="task-input" type="text" placeholder="할 일을 입력하세요..." onkeydown="if(event.key==='Enter')addTask()">
+      <button onclick="addTask()">추가</button>
+    </div>
+    <ul class="task-list" id="task-list"></ul>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="progress-label" id="progress-label">진행률 0%</div>
+  </div>
+</div>
+
+<script>
+  const today = new Date();
+  let cur = new Date(today.getFullYear(), today.getMonth(), 1);
+  let selectedDate = formatDate(today);
+  let tasks = {};
+
+  function formatDate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function formatLabel(str) {
+    const [y,m,d] = str.split('-');
+    return `${y}년 ${parseInt(m)}월 ${parseInt(d)}일`;
+  }
+
+  function renderCalendar() {
+    const grid = document.getElementById('cal-grid');
+    grid.querySelectorAll('.cal-cell').forEach(c => c.remove());
+    document.getElementById('cal-title').textContent = `${cur.getFullYear()}년 ${cur.getMonth()+1}월`;
+
+    const firstDay = new Date(cur.getFullYear(), cur.getMonth(), 1).getDay();
+    const daysInMonth = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) {
+      const el = document.createElement('div');
+      el.className = 'cal-cell empty';
+      grid.appendChild(el);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = formatDate(new Date(cur.getFullYear(), cur.getMonth(), d));
+      const el = document.createElement('div');
+      el.className = 'cal-cell';
+      if (dateStr === formatDate(today)) el.classList.add('today');
+      if (dateStr === selectedDate) el.classList.add('selected');
+      if (tasks[dateStr] && tasks[dateStr].length > 0) el.classList.add('has-task');
+      el.innerHTML = `<div class="day-num">${d}</div>`;
+      el.onclick = () => selectDate(dateStr);
+      grid.appendChild(el);
+    }
+  }
+
+  function selectDate(dateStr) {
+    selectedDate = dateStr;
+    document.getElementById('selected-date-label').textContent = formatLabel(dateStr);
+    renderCalendar();
+    renderTasks();
+  }
+
+  function changeMonth(dir) {
+    cur = new Date(cur.getFullYear(), cur.getMonth() + dir, 1);
+    renderCalendar();
+  }
+
+  function addTask() {
+    const inp = document.getElementById('task-input');
+    const text = inp.value.trim();
+    if (!text) return;
+    if (!tasks[selectedDate]) tasks[selectedDate] = [];
+    tasks[selectedDate].push({ text, done: false });
+    inp.value = '';
+    renderCalendar();
+    renderTasks();
+  }
+
+  function toggleTask(i) {
+    tasks[selectedDate][i].done = !tasks[selectedDate][i].done;
+    renderCalendar();
+    renderTasks();
+  }
+
+  function deleteTask(i) {
+    tasks[selectedDate].splice(i, 1);
+    renderCalendar();
+    renderTasks();
+  }
+
+  function renderTasks() {
+    const list = document.getElementById('task-list');
+    list.innerHTML = '';
+    const arr = tasks[selectedDate] || [];
+    if (arr.length === 0) {
+      list.innerHTML = '<div class="empty-msg">등록된 할 일이 없어요 😊</div>';
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('progress-label').textContent = '진행률 0%';
+      return;
+    }
+    arr.forEach((t, i) => {
+      const li = document.createElement('li');
+      li.className = 'task-item' + (t.done ? ' done' : '');
+      li.innerHTML = `
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${i})">
+        <span>${t.text}</span>
+        <button onclick="deleteTask(${i})">✕</button>
+      `;
+      list.appendChild(li);
+    });
+    const done = arr.filter(t => t.done).length;
+    const pct = Math.round(done / arr.length * 100);
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = `진행률 ${pct}% (${done}/${arr.length})`;
+  }
+
+  selectDate(selectedDate);
+</script>
+</body>
 </html>
